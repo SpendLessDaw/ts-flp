@@ -27,11 +27,11 @@ yarn add ts-flp
 ### Reading a project
 
 ```typescript
-import { readFile, writeFile } from 'fs/promises';
+import { readFileSync, writeFileSync } from 'fs';
 import { parseFlp, serializeFlp, readProjectMeta, listSamples, listPlugins } from 'ts-flp';
 
 // Load and parse the .flp file
-const buffer = await readFile('my-project.flp');
+const buffer = readFileSync('my-project.flp');
 const parsed = parseFlp(buffer);
 
 // Read metadata
@@ -56,9 +56,10 @@ for (const plugin of plugins) {
 ### Modifying metadata
 
 ```typescript
+import { readFileSync, writeFileSync } from 'fs';
 import { parseFlp, serializeFlp, writeProjectMeta } from 'ts-flp';
 
-const buffer = await readFile('my-project.flp');
+const buffer = readFileSync('my-project.flp');
 let parsed = parseFlp(buffer);
 
 // Modify metadata
@@ -69,15 +70,16 @@ parsed = writeProjectMeta(parsed, {
 });
 
 // Save
-await writeFile('my-project-modified.flp', serializeFlp(parsed));
+writeFileSync('my-project-modified.flp', serializeFlp(parsed));
 ```
 
 ### Rewriting sample paths
 
 ```typescript
+import { readFileSync, writeFileSync } from 'fs';
 import { parseFlp, serializeFlp, rewriteSamplePaths } from 'ts-flp';
 
-const buffer = await readFile('my-project.flp');
+const buffer = readFileSync('my-project.flp');
 let parsed = parseFlp(buffer);
 
 // Remap paths (e.g., disk migration)
@@ -85,15 +87,16 @@ parsed = rewriteSamplePaths(parsed, (oldPath) => {
   return oldPath.replace('D:\\Samples\\', 'E:\\NewSamples\\');
 });
 
-await writeFile('my-project-migrated.flp', serializeFlp(parsed));
+writeFileSync('my-project-migrated.flp', serializeFlp(parsed));
 ```
 
 ### Modifying time information
 
 ```typescript
+import { readFileSync, writeFileSync } from 'fs';
 import { parseFlp, serializeFlp, readProjectTimeInfo, writeProjectTimeInfo } from 'ts-flp';
 
-const buffer = await readFile('my-project.flp');
+const buffer = readFileSync('my-project.flp');
 let parsed = parseFlp(buffer);
 
 // Read time info
@@ -107,7 +110,7 @@ parsed = writeProjectTimeInfo(parsed, {
   workTimeSeconds: 3600, // 1 hour
 });
 
-await writeFile('my-project-modified.flp', serializeFlp(parsed));
+writeFileSync('my-project-modified.flp', serializeFlp(parsed));
 ```
 
 ## API
