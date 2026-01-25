@@ -1,0 +1,16 @@
+dist/
+node_modules/
+pyflp/
+__pycache__/
+tools/
+test_projs/
+
+pnpm-lock.yaml
+
+.env
+.env.local
+
+.cursorrules
+SPEC_FL_STUDIO_FLP_TS.md
+*.py
+events.generated.backup.ts
