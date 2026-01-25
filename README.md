@@ -216,6 +216,8 @@ pnpm run build
 
 ---
 
-## Special Thanks
+## Acknowledgements
 
-A huge thank you to **[@demberto](https://github.com/demberto)** for his incredible multi-year work on reverse-engineering the FL Studio `.flp` format. His dedication to documenting and implementing the file format has been invaluable to the community. This project would not have been possible without his foundational research and contributions.
+A huge thank you to **[@demberto](https://github.com/demberto)** ([PyFLP](https://github.com/demberto/PyFLP)), **[@monadgroup](https://github.com/monadgroup)** ([FLParser](https://github.com/monadgroup/FLParser)), and **FLPEdit** for their incredible reverse-engineering work on the FL Studio `.flp` format.
+
+This project would never have been possible without them.
