@@ -1,0 +1,24 @@
+# Source files
+src/
+test/
+test_projs/
+tools/
+pyflp/
+
+# Config files
+tsconfig.json
+vitest.config.ts
+.eslintrc.cjs
+.prettierrc
+.gitignore
+.cursorignore
+
+# Development
+*.log
+.DS_Store
+Thumbs.db
+*.tgz
+
+# Spec/docs
+SPEC_FL_STUDIO_FLP_TS.md
+*.backup.ts

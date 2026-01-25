@@ -14,3 +14,4 @@ pnpm-lock.yaml
 SPEC_FL_STUDIO_FLP_TS.md
 *.py
 events.generated.backup.ts
+*.tgz
