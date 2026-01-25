@@ -1,6 +1,6 @@
 {
   "name": "ts-flp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Minimalist TypeScript library for parsing and modifying FL Studio project files (.flp)",
   "type": "module",
   "main": "dist/src/index.js",
