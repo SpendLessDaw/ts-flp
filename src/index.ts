@@ -38,17 +38,19 @@ export {
 
 // Re-export API functions
 export {
-  // Utilities
   getFlVersion,
   getPPQ,
-  // Plugins
   listPlugins,
-  // Samples
   listSamples,
-  // Project metadata
   readProjectMeta,
-  // Time info
-  readProjectTimeInfo, rewriteSamplePaths, writeProjectMeta, writeProjectTimeInfo, type PluginRef, type ProjectMeta, type ProjectTimeInfo, type SampleRef
+  readProjectTimeInfo,
+  rewriteSamplePaths,
+  writeProjectMeta,
+  writeProjectTimeInfo,
+  type PluginRef,
+  type ProjectMeta,
+  type ProjectTimeInfo,
+  type SampleRef
 } from "./api/ProjectApi.js";
 
 // Re-export event constants

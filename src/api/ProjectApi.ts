@@ -22,12 +22,13 @@ import {
 // ============================================================================
 
 /**
- * Project metadata (name, description, artist, BPM)
+ * Project metadata (name, description, artist, genre, BPM)
  */
 export interface ProjectMeta {
   name: string | null;
   description: string | null;
   artist: string | null;
+  genre: string | null;
   bpm: number | null;
 }
 
@@ -38,12 +39,14 @@ export function readProjectMeta(parsed: ParsedFlp): ProjectMeta {
   const titleEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_TITLE);
   const commentsEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_COMMENTS);
   const artistsEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_ARTISTS);
+  const genreEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_GENRE);
   const tempoEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_TEMPO);
 
   return {
     name: titleEvent ? getEventString(titleEvent, parsed.useUnicode) : null,
     description: commentsEvent ? getEventString(commentsEvent, parsed.useUnicode) : null,
     artist: artistsEvent ? getEventString(artistsEvent, parsed.useUnicode) : null,
+    genre: genreEvent ? getEventString(genreEvent, parsed.useUnicode) : null,
     bpm: tempoEvent ? getEventNumber(tempoEvent) / 1000 : null,
   };
 }
@@ -75,6 +78,14 @@ export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>):
       return {
         ...event,
         payload: createTextPayload(meta.artist ?? "", parsed.useUnicode),
+      };
+    }
+
+    // Patch genre
+    if (meta.genre !== undefined && event.id === EVENT_ID.PROJECT_GENRE) {
+      return {
+        ...event,
+        payload: createTextPayload(meta.genre ?? "", parsed.useUnicode),
       };
     }
 

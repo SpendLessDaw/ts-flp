@@ -129,42 +129,47 @@ describe("FLP Parser", () => {
     );
   });
 
-  describe("Case 1: Basic metadata (title, artist, description)", () => {
+  describe("Case 1: Basic metadata (title, artist, description, genre)", () => {
     it.skipIf(testProjects.length === 0)("should read and write basic metadata", () => {
       const project = loadTestProject(testProjects[0]!);
 
       const name = randomString(10);
       const artist = randomString(10);
       const description = randomString(100);
+      const genre = randomString(15);
 
       const modified = writeProjectMeta(project, {
         name: name,
         artist: artist,
         description: description,
+        genre: genre,
       });
 
       const meta = readProjectMeta(modified);
       expect(meta.name).toBe(name);
       expect(meta.artist).toBe(artist);
       expect(meta.description).toContain(description);
+      expect(meta.genre).toBe(genre);
     });
   });
 
   describe("Case 2: Metadata with genre and tempo", () => {
     it.skipIf(testProjects.length === 0)(
-      "should read and write metadata with tempo",
+      "should read and write metadata with genre and tempo",
       () => {
         const project = loadTestProject(testProjects[0]!);
 
         const name = randomString(10);
         const artist = randomString(10);
         const description = randomString(100);
+        const genre = randomString(15);
         const bpm = randomBPM();
 
         const modified = writeProjectMeta(project, {
           name: name,
           artist: artist,
           description: description,
+          genre: genre,
           bpm: bpm,
         });
 
@@ -172,6 +177,7 @@ describe("FLP Parser", () => {
         expect(meta.name).toBe(name);
         expect(meta.artist).toBe(artist);
         expect(meta.description).toContain(description);
+        expect(meta.genre).toBe(genre);
         expect(meta.bpm).toBe(bpm);
       }
     );
@@ -369,6 +375,7 @@ describe("FLP Parser", () => {
         const name = `${randomString(10)} ${emoji}`;
         const artist = randomString(10);
         const description = randomString(100);
+        const genre = randomString(15);
         const bpm = randomDecimalBPM();
         const testDate = randomTimestamp();
         const workTime = randomWorkTime();
@@ -378,6 +385,7 @@ describe("FLP Parser", () => {
           name: name,
           artist: artist,
           description: description,
+          genre: genre,
           bpm: bpm,
         });
 
@@ -392,6 +400,7 @@ describe("FLP Parser", () => {
         expect(meta.name).toBe(name);
         expect(meta.artist).toBe(artist);
         expect(meta.description).toBe(description);
+        expect(meta.genre).toBe(genre);
         expect(meta.bpm).toBeCloseTo(bpm, 3);
 
         const timeInfo = readProjectTimeInfo(modified);
@@ -403,7 +412,17 @@ describe("FLP Parser", () => {
         const reMeta = readProjectMeta(reparsed);
         expect(reMeta.name).toBe(name);
         expect(reMeta.artist).toBe(artist);
+        expect(reMeta.genre).toBe(genre);
         expect(reMeta.bpm).toBeCloseTo(bpm, 3);
+
+        // Save the modified FLP to demo folder
+        const demoDir = path.join(TEST_PROJS_DIR, "demo");
+        if (!fs.existsSync(demoDir)) {
+          fs.mkdirSync(demoDir, { recursive: true });
+        }
+        const outputPath = path.join(demoDir, `modified_${testProjects[0]}`);
+        fs.writeFileSync(outputPath, serialized);
+        console.log(`Saved modified FLP to: ${outputPath}`);
       }
     );
   });

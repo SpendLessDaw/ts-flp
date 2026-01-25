@@ -6,7 +6,7 @@ Designed for **non-destructive** modifications ("conservative patch").
 
 ## Features
 
-- **Project metadata**: Read and modify name, description, artist, and BPM
+- **Project metadata**: Read and modify name, description, artist, genre, and BPM
 - **Time information**: Read and modify creation date and work time
 - **Samples**: List sample paths and batch rewrite paths
 - **VST Plugins**: List plugins with name and vendor (when available)
@@ -38,6 +38,7 @@ const parsed = parseFlp(buffer);
 const meta = readProjectMeta(parsed);
 console.log(`Project: ${meta.name}`);
 console.log(`Artist: ${meta.artist}`);
+console.log(`Genre: ${meta.genre}`);
 console.log(`BPM: ${meta.bpm}`);
 
 // List samples
@@ -66,6 +67,7 @@ let parsed = parseFlp(buffer);
 parsed = writeProjectMeta(parsed, {
   name: 'New Title',
   artist: 'My Name',
+  genre: 'Electronic',
   bpm: 140,
 });
 
@@ -122,6 +124,7 @@ interface ProjectMeta {
   name: string | null;
   description: string | null;
   artist: string | null;
+  genre: string | null;
   bpm: number | null;
 }
 
