@@ -1,6 +1,6 @@
 {
   "name": "ts-flp",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Minimalist TypeScript library for parsing and modifying FL Studio project files (.flp)",
   "type": "module",
   "main": "dist/index.js",
@@ -8,8 +8,10 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -19,7 +21,7 @@
   ],
   "scripts": {
     "dev": "ts-node index.ts",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && tsup && tsc --emitDeclarationOnly --declaration --outDir dist",
     "clean": "node -e \"require('fs').rmSync('dist', {recursive:true, force:true})\"",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
@@ -61,6 +63,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.10",
+    "tsup": "^8.4.0",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
     "eslint": "^9.39.2",
