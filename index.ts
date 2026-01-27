@@ -34,7 +34,7 @@
 export {
   createEvent, createNumberPayload, createTextPayload, findEvents,
   findFirstEvent, getEventNumber, getEventString, parseFlp, patchEvents, serializeFlp, type FlpEvent, type ParsedFlp
-} from "./parser/FlpParser.js";
+} from "./src/parser/FlpParser.js";
 
 // Re-export API functions
 export {
@@ -51,12 +51,12 @@ export {
   type ProjectMeta,
   type ProjectTimeInfo,
   type SampleRef
-} from "./api/ProjectApi.js";
+} from "./src/api/ProjectApi.js";
 
 // Re-export event constants
-export { EVENT_ID, EVENT_KIND, getEventFixedSize, getEventKind } from "./generated/events.generated.js";
+export { EVENT_ID, EVENT_KIND, getEventFixedSize, getEventKind } from "./src/generated/events.generated.js";
 
 // Re-export IO utilities for advanced usage
-export { BinaryReader } from "./io/BinaryReader.js";
-export { BinaryWriter, encodeVarInt, varIntSize } from "./io/BinaryWriter.js";
+export { BinaryReader } from "./src/io/BinaryReader.js";
+export { BinaryWriter, encodeVarInt, varIntSize } from "./src/io/BinaryWriter.js";
 

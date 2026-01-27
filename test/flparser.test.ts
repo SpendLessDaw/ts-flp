@@ -18,7 +18,7 @@ import {
   writeProjectMeta,
   writeProjectTimeInfo,
   type ParsedFlp
-} from "../src/index.js";
+} from "../index.js";
 
 // Test configuration
 const TEST_PROJS_DIR = path.join(import.meta.dirname, "..", "test_projs");
