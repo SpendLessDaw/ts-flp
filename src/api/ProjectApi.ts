@@ -3,9 +3,9 @@
  * Provides typed access to project metadata, samples, plugins, and time info
  */
 
-import { EVENT_ID } from "../generated/events.generated.js";
-import { BinaryReader } from "../io/BinaryReader.js";
-import { BinaryWriter } from "../io/BinaryWriter.js";
+import { EVENT_ID } from '../generated/events.generated.js';
+import { BinaryReader } from '../io/BinaryReader.js';
+import { BinaryWriter } from '../io/BinaryWriter.js';
 import {
   createNumberPayload,
   createTextPayload,
@@ -15,7 +15,7 @@ import {
   getEventString,
   type ParsedFlp,
   patchEvents,
-} from "../parser/FlpParser.js";
+} from '../parser/FlpParser.js';
 
 // ============================================================================
 // Project Metadata
@@ -33,6 +33,31 @@ export interface ProjectMeta {
 }
 
 /**
+ * Reads the BPM value from the parsed FLP.
+ *
+ * Primary: PROJECT_TEMPO (DWORD+28) stores BPM × 1000 as u32.
+ * Legacy fallback: _TEMPO_COARSE (WORD+2) + _TEMPO_FINE (WORD+29).
+ */
+function readBpm(parsed: ParsedFlp): number | null {
+  const tempoEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_TEMPO);
+  if (tempoEvent) {
+    return getEventNumber(tempoEvent) / 1000;
+  }
+
+  const coarseEvent = findFirstEvent(parsed, EVENT_ID.PROJECT__TEMPO_COARSE);
+  if (coarseEvent) {
+    let bpm = coarseEvent.payload.readUInt16LE(0);
+    const fineEvent = findFirstEvent(parsed, EVENT_ID.PROJECT__TEMPO_FINE);
+    if (fineEvent) {
+      bpm += fineEvent.payload.readUInt16LE(0) / 1000;
+    }
+    return bpm;
+  }
+
+  return null;
+}
+
+/**
  * Reads project metadata from a parsed FLP
  */
 export function readProjectMeta(parsed: ParsedFlp): ProjectMeta {
@@ -40,14 +65,13 @@ export function readProjectMeta(parsed: ParsedFlp): ProjectMeta {
   const commentsEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_COMMENTS);
   const artistsEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_ARTISTS);
   const genreEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_GENRE);
-  const tempoEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_TEMPO);
 
   return {
     name: titleEvent ? getEventString(titleEvent, parsed.useUnicode) : null,
     description: commentsEvent ? getEventString(commentsEvent, parsed.useUnicode) : null,
     artist: artistsEvent ? getEventString(artistsEvent, parsed.useUnicode) : null,
     genre: genreEvent ? getEventString(genreEvent, parsed.useUnicode) : null,
-    bpm: tempoEvent ? getEventNumber(tempoEvent) / 1000 : null,
+    bpm: readBpm(parsed),
   };
 }
 
@@ -61,7 +85,7 @@ export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>):
     if (meta.name !== undefined && event.id === EVENT_ID.PROJECT_TITLE) {
       return {
         ...event,
-        payload: createTextPayload(meta.name ?? "", parsed.useUnicode),
+        payload: createTextPayload(meta.name ?? '', parsed.useUnicode),
       };
     }
 
@@ -69,7 +93,7 @@ export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>):
     if (meta.description !== undefined && event.id === EVENT_ID.PROJECT_COMMENTS) {
       return {
         ...event,
-        payload: createTextPayload(meta.description ?? "", parsed.useUnicode),
+        payload: createTextPayload(meta.description ?? '', parsed.useUnicode),
       };
     }
 
@@ -77,7 +101,7 @@ export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>):
     if (meta.artist !== undefined && event.id === EVENT_ID.PROJECT_ARTISTS) {
       return {
         ...event,
-        payload: createTextPayload(meta.artist ?? "", parsed.useUnicode),
+        payload: createTextPayload(meta.artist ?? '', parsed.useUnicode),
       };
     }
 
@@ -85,7 +109,7 @@ export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>):
     if (meta.genre !== undefined && event.id === EVENT_ID.PROJECT_GENRE) {
       return {
         ...event,
-        payload: createTextPayload(meta.genre ?? "", parsed.useUnicode),
+        payload: createTextPayload(meta.genre ?? '', parsed.useUnicode),
       };
     }
 
@@ -93,7 +117,7 @@ export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>):
     if (meta.bpm && Math.abs(meta.bpm) > 0 && event.id === EVENT_ID.PROJECT_TEMPO) {
       return {
         ...event,
-        payload: createNumberPayload(Math.round(Math.abs(meta.bpm) * 1000), "u32"),
+        payload: createNumberPayload(Math.round(Math.abs(meta.bpm) * 1000), 'u32'),
       };
     }
 
@@ -159,13 +183,10 @@ export function readProjectTimeInfo(parsed: ParsedFlp): ProjectTimeInfo {
 /**
  * Writes project time info to a parsed FLP
  * Only modifies fields that are provided (non-undefined)
- * 
+ *
  * If `creationDate` or `workTimeSeconds` is set to `null`, the final value will be set on `0` (Delphi epoch)
  */
-export function writeProjectTimeInfo(
-  parsed: ParsedFlp,
-  info: Partial<ProjectTimeInfo>
-): ParsedFlp {
+export function writeProjectTimeInfo(parsed: ParsedFlp, info: Partial<ProjectTimeInfo>): ParsedFlp {
   // Read current values to preserve unmodified fields
   const current = readProjectTimeInfo(parsed);
 
@@ -241,7 +262,7 @@ export function listSamples(parsed: ParsedFlp): SampleRef[] {
  */
 export function rewriteSamplePaths(
   parsed: ParsedFlp,
-  mapper: (oldPath: string) => string
+  mapper: (oldPath: string) => string,
 ): ParsedFlp {
   return patchEvents(parsed, (event: FlpEvent) => {
     if (event.id !== EVENT_ID.CHANNEL_SAMPLE_PATH) {
@@ -336,9 +357,9 @@ function parseVstPluginData(payload: Buffer): { name: string | null; vendor: str
 
     // Extract name and vendor
     if (subEventId === VST_EVENT_ID.NAME && actualSize > 0) {
-      name = data.toString("utf8").replace(/\0/g, "");
+      name = data.toString('utf8').replace(/\0/g, '');
     } else if (subEventId === VST_EVENT_ID.VENDOR && actualSize > 0) {
-      vendor = data.toString("utf8").replace(/\0/g, "");
+      vendor = data.toString('utf8').replace(/\0/g, '');
     }
   }
 
@@ -363,8 +384,12 @@ export function listPlugins(parsed: ParsedFlp): PluginRef[] {
       // Reset context for new channel
       if (currentInternalName || currentPluginName) {
         // Save previous channel's plugin if it wasn't a VST (no plugin data)
-        const key = `${currentInternalName ?? ""}:${currentPluginName ?? ""}`;
-        if (!seenPlugins.has(key) && currentInternalName && currentInternalName !== "Fruity Wrapper") {
+        const key = `${currentInternalName ?? ''}:${currentPluginName ?? ''}`;
+        if (
+          !seenPlugins.has(key) &&
+          currentInternalName &&
+          currentInternalName !== 'Fruity Wrapper'
+        ) {
           seenPlugins.add(key);
           plugins.push({
             name: currentPluginName || currentInternalName,
@@ -387,10 +412,10 @@ export function listPlugins(parsed: ParsedFlp): PluginRef[] {
     }
 
     // Parse VST plugin data
-    if (event.id === EVENT_ID.PLUGIN_DATA && currentInternalName === "Fruity Wrapper") {
+    if (event.id === EVENT_ID.PLUGIN_DATA && currentInternalName === 'Fruity Wrapper') {
       const vstData = parseVstPluginData(event.payload);
       if (vstData.name) {
-        const key = `vst:${vstData.name}:${vstData.vendor ?? ""}`;
+        const key = `vst:${vstData.name}:${vstData.vendor ?? ''}`;
         if (!seenPlugins.has(key)) {
           seenPlugins.add(key);
           plugins.push({
@@ -406,8 +431,8 @@ export function listPlugins(parsed: ParsedFlp): PluginRef[] {
   }
 
   // Handle last channel if any
-  if (currentInternalName && currentInternalName !== "Fruity Wrapper") {
-    const key = `${currentInternalName}:${currentPluginName ?? ""}`;
+  if (currentInternalName && currentInternalName !== 'Fruity Wrapper') {
+    const key = `${currentInternalName}:${currentPluginName ?? ''}`;
     if (!seenPlugins.has(key)) {
       plugins.push({
         name: currentPluginName || currentInternalName,

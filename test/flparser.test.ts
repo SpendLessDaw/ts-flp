@@ -196,6 +196,13 @@ describe('FLP Parser', () => {
           });
 
           const meta = readProjectMeta(modified);
+
+          console.log('--------------------------------');
+          console.log('modified.events -', modified.events);
+          console.log('meta.bpm -', meta.bpm);
+          console.log('bpm -', bpm);
+          console.log('--------------------------------');
+
           expect(meta.name).toBe(name);
           expect(meta.artist).toBe(artist);
           expect(meta.description).toContain(description);
@@ -453,7 +460,7 @@ describe('FLP Parser', () => {
 
   describe('File I/O integrity', () => {
     it.skipIf(testProjects.length === 0)(
-      "should write a byte-identical FLP after immediate parse/serialize",
+      'should write a byte-identical FLP after immediate parse/serialize',
       () => {
         const demoDir = path.join(TEST_PROJS_DIR, 'demo');
         if (!fs.existsSync(demoDir)) {
