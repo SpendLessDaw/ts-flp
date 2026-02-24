@@ -308,13 +308,12 @@ function parseVstPluginData(payload: Buffer): { name: string | null; vendor: str
 
   const reader = new BinaryReader(payload);
 
-  // First 4 bytes: type marker (8, 10, or 11 for VSTs)
+  // First 4 bytes: wrapper marker.
+  // Historically seen values include 8/10/11, but newer FL versions can use
+  // other markers (e.g. 12). We read and ignore the exact value here because
+  // this parser is only called for "Fruity Wrapper" plugin data.
   const typeMarker = reader.readU32LE();
-
-  // Skip if not a VST plugin marker
-  if (typeMarker !== 8 && typeMarker !== 10 && typeMarker !== 11) {
-    return { name: null, vendor: null };
-  }
+  void typeMarker;
 
   let name: string | null = null;
   let vendor: string | null = null;

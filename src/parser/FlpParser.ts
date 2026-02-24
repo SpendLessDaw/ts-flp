@@ -104,6 +104,7 @@ export function parseFlp(buffer: Buffer): ParsedFlp {
   const events: FlpEvent[] = [];
   let flVersion = "0.0.0";
   let useUnicode = false;
+  let detectedVersion = false;
 
   const eventsStart = reader.tell();
   const eventsEnd = eventsStart + eventsSize;
@@ -154,12 +155,17 @@ export function parseFlp(buffer: Buffer): ParsedFlp {
     events.push(event);
 
     // Detect FL version from FLVersion event
-    if (eventId === EVENT_ID.PROJECT_FL_VERSION) {
-      flVersion = payload.toString("ascii").replace(/\0/g, "");
-      const parts = flVersion.split(".").map((p) => parseInt(p, 10));
-      const major = parts[0] ?? 0;
-      const minor = parts[1] ?? 0;
-      useUnicode = parts.length >= 2 && (major > 11 || (major === 11 && minor >= 5));
+    if (eventId === EVENT_ID.PROJECT_FL_VERSION && !detectedVersion) {
+      const candidate = payload.toString("ascii").replace(/\0/g, "").trim();
+      const isSemverLike = /^\d+(\.\d+)+$/.test(candidate);
+      if (isSemverLike) {
+        flVersion = candidate;
+        const parts = flVersion.split(".").map((p) => parseInt(p, 10));
+        const major = parts[0] ?? 0;
+        const minor = parts[1] ?? 0;
+        useUnicode = parts.length >= 2 && (major > 11 || (major === 11 && minor >= 5));
+        detectedVersion = true;
+      }
     }
   }
 
@@ -227,12 +233,15 @@ export function serializeFlp(parsed: ParsedFlp): Buffer {
 function serializeEvent(event: FlpEvent): Buffer {
   const writer = new BinaryWriter();
 
-  // Write event ID
-  writer.writeU8(event.id);
-
-  // For TEXT/DATA events, we need to write the VarInt size
-  if (event.id >= TEXT) {
-    writer.writeVarInt(event.payload.length);
+  // Conservative mode: preserve the original header bytes whenever available.
+  // This keeps unchanged files byte-identical, including exact VarInt encoding.
+  if (event.header.length > 0) {
+    writer.writeBytes(event.header);
+  } else {
+    writer.writeU8(event.id);
+    if (event.id >= TEXT) {
+      writer.writeVarInt(event.payload.length);
+    }
   }
 
   // Write payload

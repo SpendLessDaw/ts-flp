@@ -3,13 +3,15 @@
  * Uses smart-buffer for binary reading and protobufjs for VarInt decoding
  */
 
-import * as protobuf from "protobufjs/minimal.js";
+import protobuf from "protobufjs/minimal.js";
 import { SmartBuffer } from "smart-buffer";
 
 export class BinaryReader {
   private sb: SmartBuffer;
+  private source: Buffer;
 
   constructor(buffer: Buffer) {
+    this.source = buffer;
     this.sb = SmartBuffer.fromBuffer(buffer);
   }
 
@@ -124,7 +126,7 @@ export class BinaryReader {
    */
   readVarInt(): number {
     // Get remaining buffer from current position
-    const remainingBuffer = this.sb.toBuffer().subarray(this.sb.readOffset);
+    const remainingBuffer = this.source.subarray(this.sb.readOffset);
     const reader = protobuf.Reader.create(remainingBuffer);
     const value = reader.uint32();
     // Advance our position by how many bytes protobufjs consumed
@@ -177,6 +179,6 @@ export class BinaryReader {
    * Returns the internal buffer
    */
   toBuffer(): Buffer {
-    return this.sb.toBuffer();
+    return this.source;
   }
 }

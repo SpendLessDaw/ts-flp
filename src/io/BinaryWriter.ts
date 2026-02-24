@@ -4,7 +4,7 @@
  */
 
 import { SmartBuffer } from "smart-buffer";
-import * as protobuf from "protobufjs/minimal.js";
+import protobuf from "protobufjs/minimal.js";
 
 export class BinaryWriter {
   private sb: SmartBuffer;
