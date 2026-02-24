@@ -27,6 +27,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:dump-info": "node --loader ts-node/esm test/dump-all-info.ts",
     "lint": "eslint .",
     "format": "prettier -w .",
     "commit": "git add . && git commit -m",
