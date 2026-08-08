@@ -7,6 +7,7 @@ import { EVENT_ID } from '../generated/events.generated.js';
 import { BinaryReader } from '../io/BinaryReader.js';
 import { BinaryWriter } from '../io/BinaryWriter.js';
 import {
+  createEvent,
   createNumberPayload,
   createTextPayload,
   findFirstEvent,
@@ -16,6 +17,55 @@ import {
   type ParsedFlp,
   patchEvents,
 } from '../parser/FlpParser.js';
+
+const PROJECT_EVENT_ORDER = [
+  EVENT_ID.PROJECT_TEMPO,
+  EVENT_ID.PROJECT_TITLE,
+  EVENT_ID.PROJECT_GENRE,
+  EVENT_ID.PROJECT_ARTISTS,
+  EVENT_ID.PROJECT_COMMENTS,
+  EVENT_ID.PROJECT_TIMESTAMP,
+] as const;
+
+/** Inserts a project-level event without moving any existing event. */
+function insertProjectEvent(parsed: ParsedFlp, event: FlpEvent): ParsedFlp {
+  const orderIndex = PROJECT_EVENT_ORDER.indexOf(event.id as (typeof PROJECT_EVENT_ORDER)[number]);
+
+  let insertionIndex = -1;
+  if (orderIndex >= 0) {
+    const laterIds = new Set<number>(PROJECT_EVENT_ORDER.slice(orderIndex + 1));
+    insertionIndex = parsed.events.findIndex((candidate) => laterIds.has(candidate.id));
+
+    if (insertionIndex < 0) {
+      const previousIds = new Set<number>(PROJECT_EVENT_ORDER.slice(0, orderIndex + 1));
+      for (let index = parsed.events.length - 1; index >= 0; index--) {
+        if (previousIds.has(parsed.events[index]!.id)) {
+          insertionIndex = index + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  if (insertionIndex < 0) {
+    insertionIndex = parsed.events.findIndex((candidate) => candidate.id === EVENT_ID.CHANNEL_NEW);
+  }
+
+  if (insertionIndex < 0) {
+    const versionIndex = parsed.events.findIndex(
+      (candidate) => candidate.id === EVENT_ID.PROJECT_FL_VERSION,
+    );
+    insertionIndex = versionIndex >= 0 ? versionIndex + 1 : parsed.events.length;
+  }
+
+  const events = [...parsed.events];
+  events.splice(insertionIndex, 0, event);
+  return { ...parsed, events };
+}
+
+function replaceEventPayload(parsed: ParsedFlp, target: FlpEvent, payload: Buffer): ParsedFlp {
+  return patchEvents(parsed, (event) => (event === target ? { ...event, payload } : event));
+}
 
 // ============================================================================
 // Project Metadata
@@ -75,54 +125,121 @@ export function readProjectMeta(parsed: ParsedFlp): ProjectMeta {
   };
 }
 
+function compareVersion(version: string, expected: readonly number[]): number {
+  const actual = version.split('.').map((part) => Number.parseInt(part, 10));
+  const length = Math.max(actual.length, expected.length);
+
+  for (let index = 0; index < length; index++) {
+    const difference = (actual[index] ?? 0) - (expected[index] ?? 0);
+    if (difference !== 0) return Math.sign(difference);
+  }
+
+  return 0;
+}
+
+function validateBpm(parsed: ParsedFlp, bpm: number): void {
+  if (!Number.isFinite(bpm)) {
+    throw new RangeError('BPM must be a finite number');
+  }
+
+  const legacyHighTempo =
+    compareVersion(parsed.flVersion, [1, 4, 2]) >= 0 && compareVersion(parsed.flVersion, [11]) < 0;
+  const maximum = legacyHighTempo ? 999 : 522;
+
+  if (bpm < 10 || bpm > maximum) {
+    throw new RangeError(`BPM must be between 10 and ${maximum} for FL Studio ${parsed.flVersion}`);
+  }
+
+  if (
+    parsed.flVersion !== '0.0.0' &&
+    compareVersion(parsed.flVersion, [3, 4]) < 0 &&
+    !Number.isInteger(bpm)
+  ) {
+    throw new TypeError(`FL Studio ${parsed.flVersion} does not support decimal BPM values`);
+  }
+}
+
+function writeTextProjectEvent(
+  parsed: ParsedFlp,
+  eventId: number,
+  value: string | null | undefined,
+): ParsedFlp {
+  if (value === undefined) return parsed;
+
+  const payload = createTextPayload(value ?? '', parsed.useUnicode);
+  const existing = findFirstEvent(parsed, eventId);
+  return existing
+    ? replaceEventPayload(parsed, existing, payload)
+    : insertProjectEvent(parsed, createEvent(eventId, payload));
+}
+
+function writeProjectBpm(parsed: ParsedFlp, bpm: number | null | undefined): ParsedFlp {
+  if (bpm === undefined || bpm === null) return parsed;
+  validateBpm(parsed, bpm);
+
+  const scaledBpm = Math.round(bpm * 1000);
+  const coarseBpm = Math.floor(scaledBpm / 1000);
+  const fineBpm = scaledBpm % 1000;
+  const modernEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_TEMPO);
+  const coarseEvent = findFirstEvent(parsed, EVENT_ID.PROJECT__TEMPO_COARSE);
+  const fineEvent = findFirstEvent(parsed, EVENT_ID.PROJECT__TEMPO_FINE);
+
+  let result = parsed;
+
+  if (modernEvent) {
+    result = replaceEventPayload(result, modernEvent, createNumberPayload(scaledBpm, 'u32'));
+  }
+
+  if (coarseEvent) {
+    result = replaceEventPayload(result, coarseEvent, createNumberPayload(coarseBpm, 'u16'));
+  }
+
+  if (fineEvent) {
+    result = replaceEventPayload(result, fineEvent, createNumberPayload(fineBpm, 'u16'));
+  }
+
+  if (!modernEvent && !coarseEvent && !fineEvent) {
+    result = insertProjectEvent(
+      result,
+      createEvent(EVENT_ID.PROJECT_TEMPO, createNumberPayload(scaledBpm, 'u32')),
+    );
+  } else if (!modernEvent && coarseEvent && !fineEvent && fineBpm > 0) {
+    const updatedCoarse = findFirstEvent(result, EVENT_ID.PROJECT__TEMPO_COARSE)!;
+    const index = result.events.indexOf(updatedCoarse) + 1;
+    const events = [...result.events];
+    events.splice(
+      index,
+      0,
+      createEvent(EVENT_ID.PROJECT__TEMPO_FINE, createNumberPayload(fineBpm, 'u16')),
+    );
+    result = { ...result, events };
+  } else if (!modernEvent && !coarseEvent && fineEvent) {
+    const updatedFine = findFirstEvent(result, EVENT_ID.PROJECT__TEMPO_FINE)!;
+    const index = result.events.indexOf(updatedFine);
+    const events = [...result.events];
+    events.splice(
+      index,
+      0,
+      createEvent(EVENT_ID.PROJECT__TEMPO_COARSE, createNumberPayload(coarseBpm, 'u16')),
+    );
+    result = { ...result, events };
+  }
+
+  return result;
+}
+
 /**
  * Writes project metadata to a parsed FLP
  * Only modifies fields that are provided (non-undefined)
  */
 export function writeProjectMeta(parsed: ParsedFlp, meta: Partial<ProjectMeta>): ParsedFlp {
-  return patchEvents(parsed, (event: FlpEvent) => {
-    // Patch title
-    if (meta.name !== undefined && event.id === EVENT_ID.PROJECT_TITLE) {
-      return {
-        ...event,
-        payload: createTextPayload(meta.name ?? '', parsed.useUnicode),
-      };
-    }
-
-    // Patch comments/description
-    if (meta.description !== undefined && event.id === EVENT_ID.PROJECT_COMMENTS) {
-      return {
-        ...event,
-        payload: createTextPayload(meta.description ?? '', parsed.useUnicode),
-      };
-    }
-
-    // Patch artists
-    if (meta.artist !== undefined && event.id === EVENT_ID.PROJECT_ARTISTS) {
-      return {
-        ...event,
-        payload: createTextPayload(meta.artist ?? '', parsed.useUnicode),
-      };
-    }
-
-    // Patch genre
-    if (meta.genre !== undefined && event.id === EVENT_ID.PROJECT_GENRE) {
-      return {
-        ...event,
-        payload: createTextPayload(meta.genre ?? '', parsed.useUnicode),
-      };
-    }
-
-    // Patch tempo (stored as BPM * 1000)
-    if (meta.bpm && Math.abs(meta.bpm) > 0 && event.id === EVENT_ID.PROJECT_TEMPO) {
-      return {
-        ...event,
-        payload: createNumberPayload(Math.round(Math.abs(meta.bpm) * 1000), 'u32'),
-      };
-    }
-
-    return event;
-  });
+  let result = parsed;
+  result = writeProjectBpm(result, meta.bpm);
+  result = writeTextProjectEvent(result, EVENT_ID.PROJECT_TITLE, meta.name);
+  result = writeTextProjectEvent(result, EVENT_ID.PROJECT_GENRE, meta.genre);
+  result = writeTextProjectEvent(result, EVENT_ID.PROJECT_ARTISTS, meta.artist);
+  result = writeTextProjectEvent(result, EVENT_ID.PROJECT_COMMENTS, meta.description);
+  return result;
 }
 
 // ============================================================================
@@ -138,21 +255,21 @@ export interface ProjectTimeInfo {
 }
 
 // Delphi epoch: December 30, 1899
-const DELPHI_EPOCH = new Date(1899, 11, 30);
+const DELPHI_EPOCH_MS = Date.UTC(1899, 11, 30);
 
 /**
  * Converts Delphi timestamp (days since epoch) to Date
  */
 function delphiToDate(days: number): Date {
   const ms = days * 24 * 60 * 60 * 1000;
-  return new Date(DELPHI_EPOCH.getTime() + ms);
+  return new Date(DELPHI_EPOCH_MS + ms);
 }
 
 /**
  * Converts Date to Delphi timestamp (days since epoch)
  */
 function dateToDelphiDays(date: Date): number {
-  const ms = date.getTime() - DELPHI_EPOCH.getTime();
+  const ms = date.getTime() - DELPHI_EPOCH_MS;
   return ms / (24 * 60 * 60 * 1000);
 }
 
@@ -187,39 +304,53 @@ export function readProjectTimeInfo(parsed: ParsedFlp): ProjectTimeInfo {
  * If `creationDate` or `workTimeSeconds` is set to `null`, the final value will be set on `0` (Delphi epoch)
  */
 export function writeProjectTimeInfo(parsed: ParsedFlp, info: Partial<ProjectTimeInfo>): ParsedFlp {
-  // Read current values to preserve unmodified fields
+  if (info.creationDate === undefined && info.workTimeSeconds === undefined) {
+    return parsed;
+  }
+
   const current = readProjectTimeInfo(parsed);
 
-  return patchEvents(parsed, (event: FlpEvent) => {
-    if (event.id !== EVENT_ID.PROJECT_TIMESTAMP) {
-      return event;
-    }
+  if (
+    info.creationDate !== undefined &&
+    info.creationDate !== null &&
+    Number.isNaN(info.creationDate.getTime())
+  ) {
+    throw new RangeError('creationDate must be a valid Date');
+  }
 
-    const writer = new BinaryWriter();
+  if (
+    info.workTimeSeconds !== undefined &&
+    info.workTimeSeconds !== null &&
+    (!Number.isFinite(info.workTimeSeconds) || info.workTimeSeconds < 0)
+  ) {
+    throw new RangeError('workTimeSeconds must be a finite, non-negative number');
+  }
 
-    // Write creation date
-    if (info.creationDate !== undefined && info.creationDate !== null) {
-      writer.writeF64LE(dateToDelphiDays(info.creationDate));
-    } else if (current.creationDate !== null) {
-      writer.writeF64LE(dateToDelphiDays(current.creationDate));
-    } else {
-      writer.writeF64LE(0);
-    }
+  const creationDateDays =
+    info.creationDate === null
+      ? 0
+      : info.creationDate !== undefined
+        ? dateToDelphiDays(info.creationDate)
+        : current.creationDate !== null
+          ? dateToDelphiDays(current.creationDate)
+          : 0;
+  const workTimeDays =
+    info.workTimeSeconds === null
+      ? 0
+      : info.workTimeSeconds !== undefined
+        ? info.workTimeSeconds / (24 * 60 * 60)
+        : current.workTimeSeconds !== null
+          ? current.workTimeSeconds / (24 * 60 * 60)
+          : 0;
 
-    // Write work time
-    if (info.workTimeSeconds !== undefined && info.workTimeSeconds !== null) {
-      writer.writeF64LE(info.workTimeSeconds / (24 * 60 * 60)); // Convert seconds to days
-    } else if (current.workTimeSeconds !== null) {
-      writer.writeF64LE(current.workTimeSeconds / (24 * 60 * 60));
-    } else {
-      writer.writeF64LE(0);
-    }
+  const writer = new BinaryWriter();
+  writer.writeF64LE(creationDateDays);
+  writer.writeF64LE(workTimeDays);
 
-    return {
-      ...event,
-      payload: writer.toBuffer(),
-    };
-  });
+  const timestampEvent = findFirstEvent(parsed, EVENT_ID.PROJECT_TIMESTAMP);
+  return timestampEvent
+    ? replaceEventPayload(parsed, timestampEvent, writer.toBuffer())
+    : insertProjectEvent(parsed, createEvent(EVENT_ID.PROJECT_TIMESTAMP, writer.toBuffer()));
 }
 
 // ============================================================================

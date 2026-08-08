@@ -4,8 +4,9 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'node:os';
 import * as path from 'path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   getFlVersion,
   listPlugins,
@@ -42,64 +43,51 @@ function loadTestProject(filename: string): ParsedFlp {
   return parseFlp(buffer);
 }
 
-function randomString(length: number): string {
-  let result = '';
-  while (result.length < length) {
-    result += Math.random().toString(36).substring(2);
+function fixtureString(length: number): string {
+  return 'deterministic-fixture-value'.repeat(Math.ceil(length / 27)).substring(0, length);
+}
+
+function fixtureBpm(): number {
+  return 128;
+}
+
+function fixtureDecimalBpm(): number {
+  return 128.125;
+}
+
+function fixtureTimestamp(): Date {
+  return new Date('2024-06-15T12:34:56.000Z');
+}
+
+function fixtureWorkTime(): number {
+  return 123_456;
+}
+
+function fixtureEmoji(): string {
+  return '🎵';
+}
+
+function withTempDir(callback: (directory: string) => void): void {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-flp-test-'));
+  try {
+    callback(directory);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
-  return result.substring(0, length);
-}
-
-function randomBPM(): number {
-  // return a random BPM between 50 and 190
-  return Math.floor(Math.random() * 140) + 50;
-}
-
-function randomDecimalBPM(): number {
-  // Random BPM with decimals between 60 and 200
-  return Math.floor(Math.random() * 140000 + 60000) / 1000;
-}
-
-function randomTimestamp(): Date {
-  // Random date between 2020 and 2025
-  const start = new Date(2020, 0, 1).getTime();
-  const end = new Date(2025, 11, 31).getTime();
-  return new Date(start + Math.random() * (end - start));
-}
-
-function randomWorkTime(): number {
-  // Random work time between 0 and 1000000 seconds (~277 hours)
-  return Math.floor(Math.random() * 1000000);
-}
-
-function randomEmoji(): string {
-  const emojis = [
-    '🎵',
-    '🎹',
-    '🎸',
-    '🥁',
-    '🎤',
-    '🔊',
-    '🎧',
-    '🎼',
-    '🤓',
-    '👨‍🍳',
-    '🔥',
-    '💯',
-    '✨',
-    '🚀',
-  ];
-  return emojis[Math.floor(Math.random() * emojis.length)]!;
 }
 
 describe('FLP Parser', () => {
   const testProjects = getTestableProjects();
 
-  beforeAll(() => {
-    if (testProjects.length === 0) {
-      console.warn(`No test projects found in ${TEST_PROJS_DIR}`);
-      console.warn("Create a 'test_projs' folder with .flp files to run tests");
-    }
+  it('requires at least one local FLP fixture', () => {
+    expect(
+      testProjects.length,
+      [
+        `No .flp test project found in ${TEST_PROJS_DIR}.`,
+        "Add at least one private .flp file directly to 'test_projs/' before running the tests.",
+        'These files are ignored by Git and must not be committed.',
+      ].join('\n'),
+    ).toBeGreaterThan(0);
   });
 
   describe('Basic Parsing', () => {
@@ -118,7 +106,6 @@ describe('FLP Parser', () => {
         const version = getFlVersion(project);
         expect(version).toBeDefined();
         expect(version.length).toBeGreaterThan(0);
-        console.log(`Detected FL version (${projectFile}): ${version}`);
       }
     });
 
@@ -153,10 +140,10 @@ describe('FLP Parser', () => {
       for (const projectFile of testProjects) {
         const project = loadTestProject(projectFile);
 
-        const name = randomString(10);
-        const artist = randomString(10);
-        const description = randomString(100);
-        const genre = randomString(15);
+        const name = fixtureString(10);
+        const artist = fixtureString(10);
+        const description = fixtureString(100);
+        const genre = fixtureString(15);
 
         const modified = writeProjectMeta(project, {
           name: name,
@@ -181,11 +168,11 @@ describe('FLP Parser', () => {
         for (const projectFile of testProjects) {
           const project = loadTestProject(projectFile);
 
-          const name = randomString(10);
-          const artist = randomString(10);
-          const description = randomString(100);
-          const genre = randomString(15);
-          const bpm = randomBPM();
+          const name = fixtureString(10);
+          const artist = fixtureString(10);
+          const description = fixtureString(100);
+          const genre = fixtureString(15);
+          const bpm = fixtureBpm();
 
           const modified = writeProjectMeta(project, {
             name: name,
@@ -196,12 +183,6 @@ describe('FLP Parser', () => {
           });
 
           const meta = readProjectMeta(modified);
-
-          console.log('--------------------------------');
-          console.log('modified.events -', modified.events);
-          console.log('meta.bpm -', meta.bpm);
-          console.log('bpm -', bpm);
-          console.log('--------------------------------');
 
           expect(meta.name).toBe(name);
           expect(meta.artist).toBe(artist);
@@ -218,8 +199,8 @@ describe('FLP Parser', () => {
       for (const projectFile of testProjects) {
         const project = loadTestProject(projectFile);
 
-        const name = randomString(10);
-        const bpm = randomBPM();
+        const name = fixtureString(10);
+        const bpm = fixtureBpm();
 
         const modified = writeProjectMeta(project, {
           name: name,
@@ -238,7 +219,7 @@ describe('FLP Parser', () => {
       for (const projectFile of testProjects) {
         const project = loadTestProject(projectFile);
 
-        const bpm = randomBPM();
+        const bpm = fixtureBpm();
 
         // In TypeScript we enforce types, but we test that numeric strings work
         const modified = writeProjectMeta(project, {
@@ -263,8 +244,6 @@ describe('FLP Parser', () => {
 
         // Just verify we can list samples without error
         expect(Array.isArray(samples)).toBe(true);
-        console.log(`Found ${samples.length} samples in ${projectFile}`);
-
         if (samples.length > 0) {
           expect(samples[0]).toHaveProperty('path');
           expect(samples[0]).toHaveProperty('eventIndex');
@@ -278,7 +257,7 @@ describe('FLP Parser', () => {
         const originalSamples = listSamples(project);
 
         if (originalSamples.length > 0) {
-          const randomPrefix = randomString(8);
+          const randomPrefix = fixtureString(8);
           const modified = rewriteSamplePaths(project, (oldPath) => {
             const filename = path.basename(oldPath);
             return path.join(randomPrefix, filename);
@@ -289,7 +268,6 @@ describe('FLP Parser', () => {
 
           // Verify ALL paths now contain the random prefix
           for (const sample of newSamples) {
-            console.log(`Sample path (${projectFile}): ${sample.path}`);
             expect(sample.path).toContain(randomPrefix);
           }
         }
@@ -302,11 +280,11 @@ describe('FLP Parser', () => {
       for (const projectFile of testProjects) {
         const project = loadTestProject(projectFile);
 
-        const emoji1 = randomEmoji();
-        const emoji2 = randomEmoji();
-        const baseName = randomString(10);
-        const artist = randomString(10);
-        const description = randomString(50);
+        const emoji1 = fixtureEmoji();
+        const emoji2 = fixtureEmoji();
+        const baseName = fixtureString(10);
+        const artist = fixtureString(10);
+        const description = fixtureString(50);
 
         const nameWithEmoji = `${baseName} ${emoji1}${emoji2}`;
         const descWithEmoji = `${description} ${emoji1}`;
@@ -330,7 +308,7 @@ describe('FLP Parser', () => {
       for (const projectFile of testProjects) {
         const project = loadTestProject(projectFile);
 
-        const testDate = randomTimestamp();
+        const testDate = fixtureTimestamp();
 
         const modified = writeProjectTimeInfo(project, {
           creationDate: testDate,
@@ -368,7 +346,7 @@ describe('FLP Parser', () => {
       for (const projectFile of testProjects) {
         const project = loadTestProject(projectFile);
 
-        const workTime = randomWorkTime();
+        const workTime = fixtureWorkTime();
 
         const modified = writeProjectTimeInfo(project, {
           workTimeSeconds: workTime,
@@ -387,11 +365,7 @@ describe('FLP Parser', () => {
         const plugins = listPlugins(project);
 
         expect(Array.isArray(plugins)).toBe(true);
-        console.log(`Found ${plugins.length} plugins in ${projectFile}`);
-
-        for (const plugin of plugins) {
-          console.log(`  - ${plugin.name} (${plugin.vendor ?? 'N/A'})`);
-        }
+        for (const plugin of plugins) expect(plugin).toHaveProperty('name');
       }
     });
   });
@@ -402,14 +376,14 @@ describe('FLP Parser', () => {
         const project = loadTestProject(projectFile);
 
         // Generate random test data
-        const emoji = randomEmoji();
-        const name = `${randomString(10)} ${emoji}`;
-        const artist = randomString(10);
-        const description = randomString(100);
-        const genre = randomString(15);
-        const bpm = randomDecimalBPM();
-        const testDate = randomTimestamp();
-        const workTime = randomWorkTime();
+        const emoji = fixtureEmoji();
+        const name = `${fixtureString(10)} ${emoji}`;
+        const artist = fixtureString(10);
+        const description = fixtureString(100);
+        const genre = fixtureString(15);
+        const bpm = fixtureDecimalBpm();
+        const testDate = fixtureTimestamp();
+        const workTime = fixtureWorkTime();
 
         // Apply metadata changes
         let modified = writeProjectMeta(project, {
@@ -445,15 +419,6 @@ describe('FLP Parser', () => {
         expect(reMeta.artist).toBe(artist);
         expect(reMeta.genre).toBe(genre);
         expect(reMeta.bpm).toBeCloseTo(bpm, 3);
-
-        // Save the modified FLP to demo folder
-        const demoDir = path.join(TEST_PROJS_DIR, 'demo');
-        if (!fs.existsSync(demoDir)) {
-          fs.mkdirSync(demoDir, { recursive: true });
-        }
-        const outputPath = path.join(demoDir, `modified_${projectFile}`);
-        fs.writeFileSync(outputPath, serialized);
-        console.log(`Saved modified FLP to: ${outputPath}`);
       }
     });
   });
@@ -462,70 +427,49 @@ describe('FLP Parser', () => {
     it.skipIf(testProjects.length === 0)(
       'should write a byte-identical FLP after immediate parse/serialize',
       () => {
-        const demoDir = path.join(TEST_PROJS_DIR, 'demo');
-        if (!fs.existsSync(demoDir)) {
-          fs.mkdirSync(demoDir, { recursive: true });
-        }
+        withTempDir((directory) => {
+          for (const projectFile of testProjects) {
+            const sourcePath = path.join(TEST_PROJS_DIR, projectFile);
+            const original = fs.readFileSync(sourcePath);
+            const reserialized = serializeFlp(parseFlp(original));
+            const outputPath = path.join(directory, projectFile);
 
-        for (const projectFile of testProjects) {
-          const sourcePath = path.join(TEST_PROJS_DIR, projectFile);
-          const original = fs.readFileSync(sourcePath);
+            fs.writeFileSync(outputPath, reserialized);
+            const written = fs.readFileSync(outputPath);
 
-          const parsed = parseFlp(original);
-          const reserialized = serializeFlp(parsed);
-
-          const outputPath = path.join(demoDir, `instant_roundtrip_${projectFile}`);
-          fs.writeFileSync(outputPath, reserialized);
-          const written = fs.readFileSync(outputPath);
-
-          expect(written.length).toBe(original.length);
-          expect(written.equals(original)).toBe(true);
-        }
+            expect(written.length).toBe(original.length);
+            expect(written.equals(original)).toBe(true);
+          }
+        });
       },
     );
 
     it.skipIf(testProjects.length === 0)(
       'should keep data readable and file valid after modify/serialize/write',
       () => {
-        const demoDir = path.join(TEST_PROJS_DIR, 'demo');
-        if (!fs.existsSync(demoDir)) {
-          fs.mkdirSync(demoDir, { recursive: true });
-        }
+        withTempDir((directory) => {
+          for (const projectFile of testProjects) {
+            const sourcePath = path.join(TEST_PROJS_DIR, projectFile);
+            let modified = parseFlp(fs.readFileSync(sourcePath));
+            const name = `integrity_${fixtureString(10)}`;
+            const artist = fixtureString(10);
+            const genre = fixtureString(12);
+            const bpm = fixtureDecimalBpm();
 
-        for (const projectFile of testProjects) {
-          const sourcePath = path.join(TEST_PROJS_DIR, projectFile);
-          const original = fs.readFileSync(sourcePath);
-          let modified = parseFlp(original);
+            modified = writeProjectMeta(modified, { name, artist, genre, bpm });
+            const outputPath = path.join(directory, projectFile);
+            fs.writeFileSync(outputPath, serializeFlp(modified));
 
-          const name = `integrity_${randomString(10)}`;
-          const artist = randomString(10);
-          const genre = randomString(12);
-          const bpm = randomDecimalBPM();
-
-          modified = writeProjectMeta(modified, {
-            name,
-            artist,
-            genre,
-            bpm,
-          });
-
-          const serialized = serializeFlp(modified);
-          const outputPath = path.join(demoDir, `modified_integrity_${projectFile}`);
-          fs.writeFileSync(outputPath, serialized);
-
-          // Re-open and ensure file is still valid + data is recoverable.
-          const reparsed = parseFlp(fs.readFileSync(outputPath));
-          const meta = readProjectMeta(reparsed);
-          const samples = listSamples(reparsed);
-          const plugins = listPlugins(reparsed);
-
-          expect(meta.name).toBe(name);
-          expect(meta.artist).toBe(artist);
-          expect(meta.genre).toBe(genre);
-          expect(meta.bpm).toBeCloseTo(bpm, 3);
-          expect(Array.isArray(samples)).toBe(true);
-          expect(Array.isArray(plugins)).toBe(true);
-        }
+            const reparsed = parseFlp(fs.readFileSync(outputPath));
+            const meta = readProjectMeta(reparsed);
+            expect(meta.name).toBe(name);
+            expect(meta.artist).toBe(artist);
+            expect(meta.genre).toBe(genre);
+            expect(meta.bpm).toBeCloseTo(bpm, 3);
+            expect(Array.isArray(listSamples(reparsed))).toBe(true);
+            expect(Array.isArray(listPlugins(reparsed))).toBe(true);
+          }
+        });
       },
     );
   });
@@ -555,7 +499,6 @@ describe.skipIf(getTestableProjects().length === 0)('All test projects', () => {
         const project = loadTestProject(projectFile);
         const meta = readProjectMeta(project);
         expect(meta).toBeDefined();
-        console.log(`  ${projectFile}: "${meta.name}" @ ${meta.bpm} BPM`);
       });
     });
   }

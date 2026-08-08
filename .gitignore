@@ -3,9 +3,10 @@ node_modules/
 pyflp/
 __pycache__/
 tools/
-test_projs/
-
-pnpm-lock.yaml
+# Local FL Studio fixtures: keep private projects out of Git while retaining
+# the setup instructions required by contributors.
+test_projs/*
+!test_projs/README.md
 
 .env
 .env.local

@@ -75,15 +75,10 @@ const LOOKAHEAD_VARINT_MAX = 100_000;
  * Reads a VarInt directly from a raw buffer at the given offset.
  * Returns `{ size, bytesRead }` or `{ size: -1, bytesRead: 0 }` on failure.
  */
-function readVarIntRaw(
-  buf: Buffer,
-  off: number,
-  end: number,
-): { size: number; bytesRead: number } {
+function readVarIntRaw(buf: Buffer, off: number, end: number): { size: number; bytesRead: number } {
   let shift = 0;
   let size = 0;
   const start = off;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (off >= end) return { size: -1, bytesRead: 0 };
     const byte = buf[off]!;
@@ -126,7 +121,11 @@ function scoreAlignment(buf: Buffer, off: number, end: number, bytesToCheck: num
       consecutiveSmallByte = 0;
     } else {
       const vi = readVarIntRaw(buf, off + 1, end);
-      if (vi.size >= 0 && vi.size < LOOKAHEAD_VARINT_MAX && off + 1 + vi.bytesRead + vi.size <= end) {
+      if (
+        vi.size >= 0 &&
+        vi.size < LOOKAHEAD_VARINT_MAX &&
+        off + 1 + vi.bytesRead + vi.size <= end
+      ) {
         textDataCount++;
         off = off + 1 + vi.bytesRead + vi.size;
       } else {
@@ -161,8 +160,8 @@ export function parseFlp(buffer: Buffer): ParsedFlp {
   }
 
   const format = reader.readI16LE();
-  const channelCount = reader.readU16LE();
-  const ppq = reader.readU16LE();
+  reader.readU16LE(); // Channel count is preserved in headerChunkBytes.
+  reader.readU16LE(); // PPQ is exposed from headerChunkBytes by getPPQ().
 
   // Validate format (0 = normal project)
   if (format < -1 || format > 0x50) {
@@ -221,7 +220,11 @@ export function parseFlp(buffer: Buffer): ParsedFlp {
         const afterDword = eventStart + 1 + 4;
         const vi = readVarIntRaw(buffer, eventStart + 1, eventsEnd);
 
-        if (vi.size < 0 || vi.size > LOOKAHEAD_VARINT_MAX || eventStart + 1 + vi.bytesRead + vi.size > eventsEnd) {
+        if (
+          vi.size < 0 ||
+          vi.size > LOOKAHEAD_VARINT_MAX ||
+          eventStart + 1 + vi.bytesRead + vi.size > eventsEnd
+        ) {
           payloadSize = 4;
           headerSize = 1;
         } else if (vi.size === 3) {
