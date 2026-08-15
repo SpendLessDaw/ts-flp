@@ -2,31 +2,13 @@
  * FL Studio .flp file parser and serializer
  * Conservative patch approach: preserves all unknown data byte-for-byte
  *
- * Uses look-ahead scoring to handle events in the DWORD range (128-191)
- * that may use either fixed 4-byte encoding or VarInt-encoded variable
- * length payloads. For each unknown event in this range, both
- * interpretations are scored by parsing ahead ~200 bytes and counting
- * how many TEXT/DATA events (with valid VarInt sizes) are reachable.
- * The interpretation producing more valid TEXT/DATA events wins.
+ * Event payload sizes follow the deterministic FL Studio event ranges,
+ * including explicit overrides for known format exceptions.
  */
 
-import {
-  DWORD,
-  EVENT_ID,
-  EVENT_KIND,
-  TEXT,
-  WORD,
-  getEventKind,
-} from '../generated/events.generated.js';
+import { EVENT_ID, TEXT, getEventFixedSize, getEventKind } from '../generated/events.generated.js';
 import { BinaryReader } from '../io/BinaryReader.js';
 import { BinaryWriter } from '../io/BinaryWriter.js';
-
-/** Event IDs in the DWORD range (128-191) that are explicitly mapped in EVENT_KIND. */
-const KNOWN_DWORD_IDS: ReadonlySet<number> = new Set(
-  Object.keys(EVENT_KIND)
-    .map(Number)
-    .filter((id) => id >= DWORD && id < TEXT),
-);
 
 /**
  * Represents a single event in an FLP file
@@ -68,75 +50,6 @@ export interface ParsedFlp {
 const FLP_HEADER_MAGIC = 'FLhd';
 const FLP_DATA_MAGIC = 'FLdt';
 const FLP_HEADER_SIZE = 6; // Expected header chunk size
-const LOOKAHEAD_BYTES = 200;
-const LOOKAHEAD_VARINT_MAX = 100_000;
-
-/**
- * Reads a VarInt directly from a raw buffer at the given offset.
- * Returns `{ size, bytesRead }` or `{ size: -1, bytesRead: 0 }` on failure.
- */
-function readVarIntRaw(buf: Buffer, off: number, end: number): { size: number; bytesRead: number } {
-  let shift = 0;
-  let size = 0;
-  const start = off;
-  while (true) {
-    if (off >= end) return { size: -1, bytesRead: 0 };
-    const byte = buf[off]!;
-    off++;
-    size |= (byte & 0x7f) << shift;
-    shift += 7;
-    if (!(byte & 0x80)) break;
-  }
-  return { size, bytesRead: off - start };
-}
-
-/**
- * Scores an alignment hypothesis by parsing ahead from `off` for up to
- * `bytesToCheck` bytes.  TEXT/DATA events with valid VarInt sizes are
- * the strongest signal of correct alignment; runs of low-value unknown
- * BYTE events (typical UTF-16-LE misread) are penalised.
- */
-function scoreAlignment(buf: Buffer, off: number, end: number, bytesToCheck: number): number {
-  const limit = Math.min(off + bytesToCheck, end);
-  let textDataCount = 0;
-  let consecutiveSmallByte = 0;
-  let maxConsecutiveSmallByte = 0;
-
-  while (off < limit) {
-    const id = buf[off]!;
-
-    if (id < WORD) {
-      off += 2;
-      if (id < 32 && !KNOWN_DWORD_IDS.has(id)) {
-        consecutiveSmallByte++;
-        maxConsecutiveSmallByte = Math.max(maxConsecutiveSmallByte, consecutiveSmallByte);
-      } else {
-        consecutiveSmallByte = 0;
-      }
-    } else if (id < DWORD) {
-      off += 3;
-      consecutiveSmallByte = 0;
-    } else if (id < TEXT) {
-      off += 5;
-      consecutiveSmallByte = 0;
-    } else {
-      const vi = readVarIntRaw(buf, off + 1, end);
-      if (
-        vi.size >= 0 &&
-        vi.size < LOOKAHEAD_VARINT_MAX &&
-        off + 1 + vi.bytesRead + vi.size <= end
-      ) {
-        textDataCount++;
-        off = off + 1 + vi.bytesRead + vi.size;
-      } else {
-        return -100;
-      }
-      consecutiveSmallByte = 0;
-    }
-  }
-
-  return textDataCount * 10 - maxConsecutiveSmallByte * 3;
-}
 
 /**
  * Parses an FL Studio project file
@@ -204,48 +117,11 @@ export function parseFlp(buffer: Buffer): ParsedFlp {
 
     let payloadSize: number;
     let headerSize: number;
+    const fixedSize = getEventFixedSize(eventId);
 
-    if (eventId < WORD) {
-      payloadSize = 1;
+    if (fixedSize >= 0) {
+      payloadSize = fixedSize;
       headerSize = 1;
-    } else if (eventId < DWORD) {
-      payloadSize = 2;
-      headerSize = 1;
-    } else if (eventId < TEXT) {
-      if (KNOWN_DWORD_IDS.has(eventId)) {
-        payloadSize = 4;
-        headerSize = 1;
-      } else {
-        // Unknown DWORD-range event: use look-ahead to decide encoding
-        const afterDword = eventStart + 1 + 4;
-        const vi = readVarIntRaw(buffer, eventStart + 1, eventsEnd);
-
-        if (
-          vi.size < 0 ||
-          vi.size > LOOKAHEAD_VARINT_MAX ||
-          eventStart + 1 + vi.bytesRead + vi.size > eventsEnd
-        ) {
-          payloadSize = 4;
-          headerSize = 1;
-        } else if (vi.size === 3) {
-          // VarInt(3) produces the same total footprint as DWORD; prefer DWORD
-          payloadSize = 4;
-          headerSize = 1;
-        } else {
-          const afterVarInt = eventStart + 1 + vi.bytesRead + vi.size;
-          const dwordScore = scoreAlignment(buffer, afterDword, eventsEnd, LOOKAHEAD_BYTES);
-          const varIntScore = scoreAlignment(buffer, afterVarInt, eventsEnd, LOOKAHEAD_BYTES);
-
-          if (varIntScore > dwordScore + 2) {
-            payloadSize = vi.size;
-            reader.seek(eventStart + 1 + vi.bytesRead);
-            headerSize = 1 + vi.bytesRead;
-          } else {
-            payloadSize = 4;
-            headerSize = 1;
-          }
-        }
-      }
     } else {
       // TEXT / DATA: always VarInt-encoded size
       const sizeStart = reader.tell();

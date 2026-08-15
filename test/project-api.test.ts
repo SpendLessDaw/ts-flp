@@ -4,6 +4,8 @@ import {
   createNumberPayload,
   EVENT_ID,
   findFirstEvent,
+  getEventFixedSize,
+  getEventKind,
   parseFlp,
   readProjectMeta,
   readProjectTimeInfo,
@@ -42,7 +44,113 @@ function roundTrip(parsed: ParsedFlp): ParsedFlp {
   return parseFlp(serializeFlp(parsed));
 }
 
+function createFixedEvent(id: number, payload: Buffer): Buffer {
+  return Buffer.concat([Buffer.from([id]), payload]);
+}
+
+function createVariableEvent(id: number, payload: Buffer): Buffer {
+  let value = payload.length;
+  const size: number[] = [];
+
+  do {
+    let byte = value & 0x7f;
+    value >>>= 7;
+    if (value > 0) byte |= 0x80;
+    size.push(byte);
+  } while (value > 0);
+
+  return Buffer.concat([Buffer.from([id, ...size]), payload]);
+}
+
+function createFlStudio26Fixture(): Buffer {
+  const u8 = (value: number): Buffer => Buffer.from([value]);
+  const u32 = (value: number): Buffer => {
+    const payload = Buffer.alloc(4);
+    payload.writeUInt32LE(value);
+    return payload;
+  };
+  const utf16 = (value: string): Buffer => Buffer.from(`${value}\0`, 'utf16le');
+  const createdOn = new Date('2026-08-14T20:05:28.860Z');
+  const timestamp = Buffer.alloc(16);
+  timestamp.writeDoubleLE((createdOn.getTime() - Date.UTC(1899, 11, 30)) / 86_400_000, 0);
+  timestamp.writeDoubleLE(8_900.011 / 86_400, 8);
+
+  const events = Buffer.concat([
+    createVariableEvent(EVENT_ID.PROJECT_FL_VERSION, Buffer.from('26.1.1.5313\0', 'ascii')),
+    createFixedEvent(EVENT_ID.PROJECT_FL_BUILD, u32(5_313)),
+    createFixedEvent(0xa9, u32(15)),
+    createFixedEvent(EVENT_ID.PROJECT_LICENSED, u8(1)),
+    createFixedEvent(0xac, Buffer.from([1, 1, 0])),
+    createVariableEvent(0xc0, utf16('FL Studio 26.1.1.5313.5313')),
+    createFixedEvent(0x25, u8(2)),
+    createVariableEvent(EVENT_ID.PROJECT_LICENSEE, utf16('FL Studio 26 fixture')),
+    createFixedEvent(EVENT_ID.PROJECT_TEMPO, u32(174_000)),
+    createVariableEvent(EVENT_ID.PROJECT_TITLE, utf16('New project 1')),
+    createVariableEvent(EVENT_ID.PROJECT_COMMENTS, utf16('')),
+    createVariableEvent(EVENT_ID.PROJECT_GENRE, utf16('Unknown')),
+    createVariableEvent(EVENT_ID.PROJECT_ARTISTS, utf16('Unfracted Hollow')),
+    createVariableEvent(EVENT_ID.PROJECT_TIMESTAMP, timestamp),
+  ]);
+  const dataHeader = Buffer.alloc(8);
+  dataHeader.write('FLdt', 0, 'ascii');
+  dataHeader.writeUInt32LE(events.length, 4);
+
+  return Buffer.concat([createHeader(), dataHeader, events]);
+}
+
 describe('Project API contracts', () => {
+  it('parses the FL Studio 26 preamble with the 0xAC size exception', () => {
+    const fixture = createFlStudio26Fixture();
+    const parsed = parseFlp(fixture);
+
+    expect(parsed.events.map((event) => event.id)).toEqual([
+      EVENT_ID.PROJECT_FL_VERSION,
+      EVENT_ID.PROJECT_FL_BUILD,
+      0xa9,
+      EVENT_ID.PROJECT_LICENSED,
+      0xac,
+      0xc0,
+      0x25,
+      EVENT_ID.PROJECT_LICENSEE,
+      EVENT_ID.PROJECT_TEMPO,
+      EVENT_ID.PROJECT_TITLE,
+      EVENT_ID.PROJECT_COMMENTS,
+      EVENT_ID.PROJECT_GENRE,
+      EVENT_ID.PROJECT_ARTISTS,
+      EVENT_ID.PROJECT_TIMESTAMP,
+    ]);
+
+    const unknownDword = parsed.events[2]!;
+    expect(unknownDword.header).toEqual(Buffer.from([0xa9]));
+    expect(unknownDword.payload.readUInt32LE()).toBe(15);
+
+    const sizeException = parsed.events[4]!;
+    expect(getEventFixedSize(0xac)).toBe(3);
+    expect(getEventKind(0xac)).toBe('unknown');
+    expect(sizeException.kind).toBe('unknown');
+    expect(sizeException.header).toEqual(Buffer.from([0xac]));
+    expect(sizeException.payload).toEqual(Buffer.from([1, 1, 0]));
+    expect(parsed.events[5]!.payload.toString('utf16le').replace(/\0/g, '')).toBe(
+      'FL Studio 26.1.1.5313.5313',
+    );
+
+    expect(readProjectMeta(parsed)).toEqual({
+      name: 'New project 1',
+      description: '',
+      artist: 'Unfracted Hollow',
+      genre: 'Unknown',
+      bpm: 174,
+    });
+
+    const timeInfo = readProjectTimeInfo(parsed);
+    const expectedCreationTime = new Date('2026-08-14T20:05:28.860Z').getTime();
+    expect(
+      Math.abs((timeInfo.creationDate?.getTime() ?? 0) - expectedCreationTime),
+    ).toBeLessThanOrEqual(1);
+    expect(timeInfo.workTimeSeconds).toBeCloseTo(8_900.011, 6);
+    expect(serializeFlp(parsed)).toEqual(fixture);
+  });
+
   it('creates missing metadata in the project preamble', () => {
     const channelEvent = createEvent(EVENT_ID.CHANNEL_NEW, createNumberPayload(1, 'u16'));
     const original = createParsed([channelEvent]);

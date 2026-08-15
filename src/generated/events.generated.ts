@@ -17,6 +17,11 @@ export const DWORD = 128;
 export const TEXT = 192;
 export const DATA = 208;
 
+// FL Studio 25+ writes this otherwise-unknown DWORD-range event with 3 payload bytes.
+const FIXED_SIZE_OVERRIDES: Readonly<Record<number, number>> = {
+  0xac: 3,
+};
+
 // IDs for TEXT events that use UTF-16LE in newer FL versions
 export const NEW_TEXT_IDS = [
   TEXT + 49, // ArrangementID.Name
@@ -145,6 +150,8 @@ export type EventKind =
  * Used for proper serialization/deserialization
  */
 export const EVENT_KIND: Record<number, EventKind> = {
+  [0xac]: 'unknown',
+
   // Project events
   [EVENT_ID.PROJECT_LOOP_ACTIVE]: 'u8',
   [EVENT_ID.PROJECT_SHOW_INFO]: 'u8',
@@ -271,6 +278,11 @@ export function getEventKind(eventId: number): EventKind {
  * Returns -1 for variable-length events (TEXT/DATA)
  */
 export function getEventFixedSize(eventId: number): number {
+  const override = FIXED_SIZE_OVERRIDES[eventId];
+  if (override !== undefined) {
+    return override;
+  }
+
   if (eventId < WORD) {
     return 1;
   } else if (eventId < DWORD) {
