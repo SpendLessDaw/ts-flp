@@ -1,6 +1,6 @@
 {
   "name": "ts-flp",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Minimalist TypeScript library for parsing and modifying FL Studio project files (.flp)",
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,7 @@
   ],
   "scripts": {
     "dev": "ts-node index.ts",
-    "build": "npm run clean && tsup && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "pnpm run clean && tsup && tsc -p tsconfig.build.json",
     "clean": "node -e \"require('fs').rmSync('dist', {recursive:true, force:true})\"",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
@@ -32,7 +32,7 @@
     "format": "prettier -w .",
     "commit": "git add . && git commit -m",
     "commit:s": "git add . && git commit -S -m",
-    "prepublishOnly": "npm run build && npm run test"
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test"
   },
   "keywords": [
     "fl-studio",
@@ -63,14 +63,16 @@
     "smart-buffer": "^4.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/node": "^25.0.10",
-    "tsup": "^8.4.0",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
     "prettier": "^3.8.1",
     "ts-node": "^10.9.2",
+    "tsup": "^8.4.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

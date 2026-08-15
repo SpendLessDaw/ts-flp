@@ -160,6 +160,14 @@ interface PluginRef {
 | `getFlVersion(parsed)`               | Get the FL Studio version string                   |
 | `getPPQ(parsed)`                     | Get the PPQ (Pulses Per Quarter note)              |
 
+### Write behavior
+
+- `undefined` leaves the corresponding value unchanged.
+- `null` clears text metadata, leaves BPM unchanged, and resets time values to zero.
+- Missing metadata and timestamp events are created in the project preamble.
+- BPM values are validated against the limits supported by the detected FL Studio version.
+- Invalid dates, negative work times, and non-finite numeric values throw an error.
+
 ## Constraints and limitations
 
 ### What this library does
@@ -196,6 +204,9 @@ src/
 ```bash
 # Install dependencies
 pnpm install
+
+# Add at least one private .flp file directly to test_projs/
+# These fixtures are ignored by Git and are required by the integration tests.
 
 # Type checking
 pnpm run typecheck
